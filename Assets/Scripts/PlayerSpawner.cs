@@ -3,29 +3,47 @@ using UnityEngine;
 
 public class PlayerSpawner : NetworkBehaviour
 {
-    public GameObject playerPrefab;
-    public Vector3 spawnA, spawnB;
-    private int playersSpawned = 0;
-    
+    public GameObject playerPrefab; // Assign this in the Unity editor with your player prefab
+    public Transform spawnA; // Assign in Unity editor, initial spawn point for the first player
+    public Transform spawnB; // Assign in Unity editor, spawn point for all subsequent players
+
+    private bool isFirstPlayerSpawned = false; // To track if the first player has been spawned
+
     public override void OnNetworkSpawn()
     {
-        if (IsServer) // Only the server should spawn the players
+        if (IsServer)
         {
-            NetworkManager.Singleton.OnClientConnectedCallback += SpawnPlayer;
+            NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
         }
     }
 
-    private void SpawnPlayer(ulong clientId)
+    public override void OnNetworkDespawn()
     {
-        if (playersSpawned >= 2) return; // Only spawn two players
+        if (IsServer)
+        {
+            NetworkManager.Singleton.OnClientConnectedCallback -= HandleClientConnected;
+        }
+    }
 
-        // Choose spawn point based on the number of players spawned
-        Vector3 spawnPoint = (playersSpawned == 0) ? spawnA : spawnB;
+    private void HandleClientConnected(ulong clientId)
+    {
+        // Determine the spawn point based on whether the first player has been spawned
+        Transform spawnPoint = isFirstPlayerSpawned ? spawnB : spawnA;
 
-        // Spawn the player at the chosen position
-        GameObject playerInstance = Instantiate(playerPrefab, spawnPoint, Quaternion.identity);
-        playerInstance.GetComponent<NetworkObject>().SpawnAsPlayerObject(clientId);
+        // Spawn the player at the determined spawn point
+        GameObject player = Instantiate(playerPrefab, spawnPoint.position, spawnPoint.rotation);
+        player.GetComponent<NetworkObject>().SpawnAsPlayerObject(clientId);
 
-        playersSpawned++;
+        // Update the flag to ensure the next player spawns at spawnB
+        isFirstPlayerSpawned = true;
+    }
+
+    void OnDestroy()
+    {
+        // Clean up the event callback when the spawner is destroyed
+        if (NetworkManager.Singleton != null && IsServer)
+        {
+            NetworkManager.Singleton.OnClientConnectedCallback -= HandleClientConnected;
+        }
     }
 }
