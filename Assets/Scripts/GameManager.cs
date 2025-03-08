@@ -1,81 +1,47 @@
-using System.Collections;
-using System.Collections.Generic;
-using Unity.Netcode;
 using UnityEngine;
+using Unity.Netcode;
+using System.Collections.Generic;
 
 public class GameManager : NetworkBehaviour
 {
-    public float roundTime = 30f; // Duration of each round
-    private List<ulong> playerClientIds = new List<ulong>();
+    public static GameManager Instance { get; private set; }
 
-    public override void OnNetworkSpawn()
+    public int numberOfPlayers = 0;
+
+    void Awake()
     {
-        if (IsServer)
+        if (Instance == null)
         {
-            NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
+        else
+        {
+            Destroy(gameObject);
         }
     }
 
-    private void OnDestroy()
+    private void Update()
     {
-        if (IsServer && NetworkManager.Singleton != null)
+        if (Input.GetKeyDown(KeyCode.F)) 
         {
-            NetworkManager.Singleton.OnClientConnectedCallback -= HandleClientConnected;
+            ChangePlayerModes(Mode.OFFENSE);
         }
     }
-
-    private void HandleClientConnected(ulong clientId)
+    public void ChangePlayerModes(Mode newMode)
     {
-        StartCoroutine(WaitAndAddPlayer(clientId));
-    }
-
-    IEnumerator WaitAndAddPlayer(ulong clientId)
-    {
-        // Wait until the client's player object is spawned
-        while (NetworkManager.Singleton.ConnectedClients[clientId].PlayerObject == null)
+        foreach (var player in NetworkManager.Singleton.ConnectedClientsList)
         {
-            yield return null;
-        }
-
-        if (NetworkManager.Singleton.ConnectedClients.ContainsKey(clientId))
-        {
-            playerClientIds.Add(clientId);
-            if (playerClientIds.Count == 2)
+            PlayerController controller = player.PlayerObject.GetComponent<PlayerController>();
+            if (controller != null)
             {
-                StartCoroutine(GameplayLoop());
+                controller.SetPlayerMode(newMode);
             }
         }
     }
-
-    IEnumerator GameplayLoop()
+    public void AddPlayer()
     {
-        if (!IsServer)
-            yield break;  // Ensure this loop only runs on the server
-
-        int offenseIndex = Random.Range(0, 2);
-        int defenseIndex = 1 - offenseIndex;
-
-        while (true)  // Loop indefinitely or until a game end condition is met
-        {
-            SetPlayerMode(playerClientIds[offenseIndex], true);
-            SetPlayerMode(playerClientIds[defenseIndex], false);
-
-            yield return new WaitForSeconds(roundTime);
-
-            // Swap roles after each round
-            int temp = offenseIndex;
-            offenseIndex = defenseIndex;
-            defenseIndex = temp;
-        }
-    }
-
-    private void SetPlayerMode(ulong clientId, bool offense)
-    {
-        /*
-        var player = NetworkManager.Singleton.ConnectedClients[clientId].PlayerObject;
-        if (player != null && IsServer)  // Ensure code execution on the server
-        {
-            player.GetComponent<PlayerController>().IsOffense.Value = offense;
-        }*/
+        numberOfPlayers++;
+        Debug.Log("Player added. Total players: " + numberOfPlayers);
     }
 }

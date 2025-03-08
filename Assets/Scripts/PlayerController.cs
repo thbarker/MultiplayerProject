@@ -2,6 +2,7 @@ using Unity.Netcode;
 using UnityEngine;
 public enum Mode
 {
+    WAITING,
     OFFENSE,
     DEFENSE
 }
@@ -15,22 +16,40 @@ public class PlayerController : NetworkBehaviour
     private Rigidbody rb;
     private Animator animator;
     private GameObject camera;
-    public NetworkVariable<bool> offense = new NetworkVariable<bool>();
+    public NetworkVariable<Mode> mode = new NetworkVariable<Mode>();
+    private GameManager gameManager;
+    [SerializeField]
+    private SkinnedMeshRenderer meshRenderer;
 
-
-    private void Awake()
+    private void Start()
     {
         rb = GetComponent<Rigidbody>();
         animator = GetComponent<Animator>();
         camera = transform.Find("Camera").gameObject;
+        gameManager = GameObject.FindWithTag("GameManager").GetComponent<GameManager>();
+        if (gameManager)
+            gameManager.AddPlayer();
+        mode.Value = Mode.WAITING;
+        if(IsLocalPlayer)
+        {
+            meshRenderer.enabled = false;
+        }
     }
-
     void Update()
     {
         if (IsClient && IsOwner) // Check if this is the client and it owns this GameObject
         {
             HandleInput();
             HandleAnimationsServerRpc();
+        }
+
+    }
+    public void SetPlayerMode(Mode newMode)
+    {
+        if (IsServer)
+        {
+            mode.Value = newMode;
+            ResetCameraRotationClientRpc();
         }
     }
 
@@ -49,20 +68,27 @@ public class PlayerController : NetworkBehaviour
             MovePlayerServerRpc(0);
         }
 
-        // Handling mouse aiming
-        float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
-        float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;
+        
+        if (IsLocalPlayer && mode.Value == Mode.OFFENSE) // Ensure this code is only run in Offense mode
+        {
+            // Handling mouse aiming
+            float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
+            float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;
 
-        currentPitch -= mouseY; // Subtracting to invert the vertical input
-        currentPitch = Mathf.Clamp(currentPitch, -90f, 90f); // Clamping pitch to prevent overrotation
+            currentPitch -= mouseY; // Subtracting to invert the vertical input
+            currentPitch = Mathf.Clamp(currentPitch, -90f, 90f); // Clamping pitch to prevent overrotation
 
-        currentYaw += mouseX;
-
-        // Send the computed pitch and yaw to the server to update rotation
-        AimPlayerServerRpc(currentPitch, currentYaw);
+            currentYaw += mouseX;
+            Quaternion targetRotation = Quaternion.Euler(currentPitch, currentYaw, 0);
+            camera.transform.localRotation = targetRotation;
+        }
     }
-
-
+    [ClientRpc]
+    private void ResetCameraRotationClientRpc()
+    {
+        // Resets the camera's rotation relative to the parent object (the player)
+        camera.transform.localRotation = Quaternion.identity;
+    }
 
     [ServerRpc]
     private void HandleAnimationsServerRpc()
@@ -77,7 +103,7 @@ public class PlayerController : NetworkBehaviour
     [ServerRpc]
     private void MovePlayerServerRpc(int direction)
     {
-        if (IsServer && !offense.Value) // Ensure this code is executed on the server
+        if (IsServer && mode.Value == Mode.DEFENSE) // Ensure this code is executed on the server
         {
             // Use transform.right for movement relative to the object's orientation
             Vector3 movement = transform.right * direction * speed;
@@ -86,12 +112,11 @@ public class PlayerController : NetworkBehaviour
     }
 
     [ServerRpc]
-    void AimPlayerServerRpc(float pitch, float yaw)
+    void FireServerRpc()
     {
-        if (IsServer && offense.Value) // Ensure this code is executed on the server
+        if (IsServer && mode.Value == Mode.OFFENSE) // Ensure this code is executed on the server
         {
-            Quaternion targetRotation = Quaternion.Euler(pitch, yaw, 0);
-            camera.transform.rotation = targetRotation;
+            
         }
     }
 
