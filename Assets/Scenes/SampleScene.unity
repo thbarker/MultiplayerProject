@@ -288,6 +288,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   numberOfPlayers: 0
+  roundStartTime: 2
+  roundTime: 5
+  roundEndTime: 2
 --- !u!1 &278770938
 GameObject:
   m_ObjectHideFlags: 0

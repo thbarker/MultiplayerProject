@@ -31,26 +31,28 @@ public class PlayerController : NetworkBehaviour
         if (gameManager)
             gameManager.AddPlayer();
         mode.Value = Mode.WAITING;
-        if (IsLocalPlayer)
-        {
-            meshRenderer.enabled = false;
-        }
     }
+    public override void OnNetworkSpawn()
+    {
+        if(IsLocalPlayer)
+            meshRenderer.enabled = false;
+    }
+
     void Update()
     {
         if (IsClient && IsOwner) // Check if this is the client and it owns this GameObject
         {
             HandleInput();
-            HandleAnimationsServerRpc();
+            UpdateAnimationStateServerRpc(rb.velocity, mode.Value, currentYaw, currentPitch);
         }
 
     }
     public void SetPlayerMode(Mode newMode)
     {
-        if (IsServer)
+        if (IsClient)
         {
             mode.Value = newMode;
-            if(mode.Value == Mode.OFFENSE)
+            if (mode.Value == Mode.OFFENSE)
             {
                 SetOffense();
             }
@@ -98,10 +100,10 @@ public class PlayerController : NetworkBehaviour
         // Client Sided Aiming
         AimPlayer();
 
-        // Server Sided Shooting
-        if (Input.GetMouseButtonDown(0))
+        if (IsLocalPlayer && Input.GetMouseButtonDown(0))
         {
-            FireServerRpc();
+            Vector3 aimDirection = playerCamera.transform.forward; // Assuming playerCamera is properly referenced
+            FireServerRpc(aimDirection); // Call the ServerRpc method with the current camera forward vector
         }
     }
 
@@ -111,28 +113,30 @@ public class PlayerController : NetworkBehaviour
         // Resets the camera's rotation relative to the parent object (the player)
         playerCamera.transform.localRotation = Quaternion.identity;
     }
-    [ServerRpc]
+    [ServerRpc(RequireOwnership = false)]
     private void ResetPositionServerRpc()
     {
-        if(IsServer)
-            // Resets the players movement to the spawnpoint
+        if (IsServer)
+        {
             transform.position = new Vector3(0, transform.position.y, transform.position.z);
+            rb.velocity = Vector3.zero;
+        }
     }
 
-    [ServerRpc]
-    private void HandleAnimationsServerRpc()
+
+    [ClientRpc]
+    private void HandleAnimationsClientRpc(Vector3 velocity, Mode mode, float yaw, float pitch)
     {
-        // Convert global velocity to local velocity
-        Vector3 localVelocity = transform.InverseTransformDirection(rb.velocity);
+        // Handle this locally on each client
+        Vector3 localVelocity = transform.InverseTransformDirection(velocity);
 
-        // Set the Speed parameter based on the magnitude of local x velocity
-        animator.SetFloat("Speed", localVelocity.x);
+        animator.SetFloat("Speed", localVelocity.x);  // Use Mathf.Abs if speed should always be positive
 
-        if (mode.Value == Mode.OFFENSE)
+        if (mode == Mode.OFFENSE)
         {
             animator.SetBool("Aiming", true);
-            animator.SetFloat("AimX", currentYaw / 45);
-            animator.SetFloat("AimY", -currentPitch / 45);
+            animator.SetFloat("AimX", yaw / 90);
+            animator.SetFloat("AimY", -pitch / 90);
         }
         else
         {
@@ -141,6 +145,14 @@ public class PlayerController : NetworkBehaviour
             animator.SetFloat("AimY", 0);
         }
     }
+
+    // This ServerRpc is called by the client who owns the object, the server processes it, and then calls the ClientRpc
+    [ServerRpc(RequireOwnership = true)]
+    private void UpdateAnimationStateServerRpc(Vector3 velocity, Mode mode, float yaw, float pitch)
+    {
+        HandleAnimationsClientRpc(velocity, mode, yaw, pitch);
+    }
+
 
     [ServerRpc]
     private void MovePlayerServerRpc(int direction)
@@ -181,34 +193,30 @@ public class PlayerController : NetworkBehaviour
     }
 
     [ServerRpc(RequireOwnership = true)]
-    void FireServerRpc()
+    void FireServerRpc(Vector3 aimDirection)
     {
-        // Check if the player is in OFFENSE mode and allowed to fire
         if (mode.Value == Mode.OFFENSE && canFire.Value)
         {
-            // Perform the raycast
-            PerformRaycast();
-            // After firing, set canFire to false to prevent repeated shots without authorization
+            PerformRaycast(aimDirection);  // Pass the aim direction calculated on the client
             canFire.Value = false;
-            // Inform the GameManager that this player has fired
             gameManager.UpdatePlayerFired(true);
         }
     }
 
-    void PerformRaycast()
+    void PerformRaycast(Vector3 aimDirection)
     {
         if (playerCamera != null)
         {
             RaycastHit hit;
-            Ray ray = new Ray(playerCamera.transform.position, playerCamera.transform.forward);
-            float maxDistance = 100.0f;  // Define the maximum distance for the raycast
+            Ray ray = new Ray(playerCamera.transform.position, aimDirection.normalized);  // Use normalized direction
+            float maxDistance = 100.0f;
 
             if (Physics.Raycast(ray, out hit, maxDistance))
             {
-                // Example: Apply damage if the hit object has a damageable component
                 var damageable = hit.collider.GetComponent<PlayerController>();
-                if (damageable != null)
+                if (damageable != null && damageable != this)  // Ensure not hitting self
                 {
+                    // Server handles damage application
                     Debug.Log("Hit " + hit.collider.name);
                 }
             }

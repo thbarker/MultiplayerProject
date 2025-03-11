@@ -222,7 +222,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 2366355346
+  GlobalObjectIdHash: 1597928087
   InScenePlacedSourceGlobalObjectIdHash: 1614298898
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
@@ -246,6 +246,8 @@ MonoBehaviour:
   mouseSensitivity: 100
   speed: 5
   mode:
+    m_InternalValue: 0
+  canFire:
     m_InternalValue: 0
   meshRenderer: {fileID: 3220611050984282539}
 --- !u!54 &3677501711366370212

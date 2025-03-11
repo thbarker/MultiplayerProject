@@ -40,6 +40,7 @@ public class GameManager : NetworkBehaviour
             StartCoroutine(GameplayLoop());
         }
     }
+
     public void ChangePlayerMode(PlayerController player, Mode newMode)
     {
         player.SetPlayerMode(newMode);
@@ -66,47 +67,50 @@ public class GameManager : NetworkBehaviour
 
     private IEnumerator GameplayLoop()
     {
-        Debug.Log("Round Starting...");
-        // Countdown round start time
-        yield return new WaitForSeconds(roundStartTime);
-
-        // Allow player1 to fire
-        player1.SetCanFire(true);
-
-        // Set initial round time
-        timeCounter = 0; // roundTime should be defined as the duration of the round in seconds
-
-        Debug.Log("Round Going...");
-        // Countdown roundtime if player hasn't shot using hasFired bool
-        while (timeCounter < roundTime && !hasFired)
+        while (true)
         {
-            timeCounter += Time.deltaTime;
-            yield return null;
+            Debug.Log("Round Starting...");
+            // Countdown round start time
+            yield return new WaitForSeconds(roundStartTime);
+
+            // Allow player1 to fire
+            player1.SetCanFire(true);
+
+            // Set initial round time
+            timeCounter = 0; // roundTime should be defined as the duration of the round in seconds
+
+            Debug.Log("Round Going...");
+            // Countdown roundtime if player hasn't shot using hasFired bool
+            while (timeCounter < roundTime && !hasFired)
+            {
+                timeCounter += Time.deltaTime;
+                yield return null;
+            }
+
+            // Round ends either by timer or if player has fired
+            // Update the scoreboard
+
+            // Check who was on offense and switch sides
+            if (player1.mode.Value == Mode.OFFENSE)
+            {
+                ChangePlayerMode(player1, Mode.DEFENSE);
+                ChangePlayerMode(player2, Mode.OFFENSE);
+            }
+            else
+            {
+                ChangePlayerMode(player1, Mode.OFFENSE);
+                ChangePlayerMode(player2, Mode.DEFENSE);
+            }
+
+            // Reset player's fire ability for the next round
+            player1.SetCanFire(false);
+            player2.SetCanFire(false);
+            hasFired = false;
+
+            Debug.Log("Round Ending...");
+            // Optionally, implement a delay or condition before restarting the loop or ending the game
+            yield return new WaitForSeconds(roundEndTime);
         }
-
-        // Round ends either by timer or if player has fired
-        // Update the scoreboard
-
-        // Check who was on offense and switch sides
-        if (player1.mode.Value == Mode.OFFENSE)
-        {
-            ChangePlayerMode(player1, Mode.DEFENSE);
-            ChangePlayerMode(player2, Mode.OFFENSE);
-        }
-        else
-        {
-            ChangePlayerMode(player1, Mode.OFFENSE);
-            ChangePlayerMode(player2, Mode.DEFENSE);
-        }
-
-        // Reset player's fire ability for the next round
-        player1.SetCanFire(false);
-        player2.SetCanFire(false);
-        hasFired = false;
-
-        Debug.Log("Round Ending...");
-        // Optionally, implement a delay or condition before restarting the loop or ending the game
-        yield return new WaitForSeconds(roundEndTime);
     }
 
 
