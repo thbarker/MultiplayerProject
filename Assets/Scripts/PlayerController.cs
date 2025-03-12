@@ -1,3 +1,4 @@
+using System.Threading;
 using Unity.Netcode;
 using UnityEngine;
 public enum Mode
@@ -36,6 +37,11 @@ public class PlayerController : NetworkBehaviour
     {
         if(IsLocalPlayer)
             meshRenderer.enabled = false;
+        // Lock cursor to the center of the screen
+        Cursor.lockState = CursorLockMode.Locked;
+
+        // Hide cursor from view
+        Cursor.visible = false;
     }
 
     void Update()
@@ -43,7 +49,7 @@ public class PlayerController : NetworkBehaviour
         if (IsClient && IsOwner) // Check if this is the client and it owns this GameObject
         {
             HandleInput();
-            UpdateAnimationStateServerRpc(rb.velocity, mode.Value, currentYaw, currentPitch);
+            UpdateAnimationServerRpc(currentYaw, currentPitch);
         }
 
     }
@@ -66,12 +72,12 @@ public class PlayerController : NetworkBehaviour
     private void SetOffense()
     {
         ResetPositionServerRpc();
-        ResetCameraRotationClientRpc();
+        ResetCameraRotation();
     }
     private void SetDefense()
     {
         ResetPositionServerRpc();
-        ResetCameraRotationClientRpc();
+        ResetCameraRotation();
     }
     public void SetCanFire(bool flag)
     {
@@ -81,9 +87,9 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
-    private void HandleInput()
+    void HandleInput()
     {
-        // Server sided movement
+        // Handle movement
         if (Input.GetKey(KeyCode.A))
         {
             MovePlayerServerRpc(-1);
@@ -91,49 +97,39 @@ public class PlayerController : NetworkBehaviour
         else if (Input.GetKey(KeyCode.D))
         {
             MovePlayerServerRpc(1);
-        }
-        else
+        } else
         {
             MovePlayerServerRpc(0);
         }
 
-        // Client Sided Aiming
-        AimPlayer();
-
-        if (IsLocalPlayer && Input.GetMouseButtonDown(0))
+        // Handle aiming and firing
+        if (IsLocalPlayer)
         {
-            Vector3 aimDirection = playerCamera.transform.forward; // Assuming playerCamera is properly referenced
-            FireServerRpc(aimDirection); // Call the ServerRpc method with the current camera forward vector
+            AimPlayer();  // Local aiming logic remains client-side for responsiveness
+
+            if (Input.GetMouseButtonDown(0))
+            {
+                Vector3 aimDirection = playerCamera.transform.forward;
+                FireServerRpc(aimDirection); // Fire action is server validated
+            }
         }
     }
 
-    [ClientRpc]
-    private void ResetCameraRotationClientRpc()
+    [ServerRpc]
+    void UpdateAnimationServerRpc(float yaw, float pitch)
     {
-        // Resets the camera's rotation relative to the parent object (the player)
-        playerCamera.transform.localRotation = Quaternion.identity;
-    }
-    [ServerRpc(RequireOwnership = false)]
-    private void ResetPositionServerRpc()
-    {
-        if (IsServer)
-        {
-            transform.position = new Vector3(0, transform.position.y, transform.position.z);
-            rb.velocity = Vector3.zero;
-        }
+        UpdateAnimation(yaw, pitch); // Update server-side
     }
 
-
-    [ClientRpc]
-    private void HandleAnimationsClientRpc(Vector3 velocity, Mode mode, float yaw, float pitch)
+    void UpdateAnimation(float yaw, float pitch)
     {
-        // Handle this locally on each client
-        Vector3 localVelocity = transform.InverseTransformDirection(velocity);
+        Vector3 localVelocity = transform.InverseTransformDirection(rb.velocity);
 
-        animator.SetFloat("Speed", localVelocity.x);  // Use Mathf.Abs if speed should always be positive
+        animator.SetFloat("Speed", localVelocity.x);
 
-        if (mode == Mode.OFFENSE)
+        if (mode.Value == Mode.OFFENSE)
         {
+            animator.SetFloat("Speed", 0);
             animator.SetBool("Aiming", true);
             animator.SetFloat("AimX", yaw / 90);
             animator.SetFloat("AimY", -pitch / 90);
@@ -146,13 +142,23 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
-    // This ServerRpc is called by the client who owns the object, the server processes it, and then calls the ClientRpc
-    [ServerRpc(RequireOwnership = true)]
-    private void UpdateAnimationStateServerRpc(Vector3 velocity, Mode mode, float yaw, float pitch)
+    private void ResetCameraRotation()
     {
-        HandleAnimationsClientRpc(velocity, mode, yaw, pitch);
+        currentPitch = 0;
+        currentYaw = 0;
+        playerCamera.transform.localRotation = Quaternion.identity;
     }
 
+    [ServerRpc(RequireOwnership = false)]
+    private void ResetPositionServerRpc()
+    {
+        if (IsServer)
+        {
+            transform.position = new Vector3(0, transform.position.y, transform.position.z);
+            rb.velocity = Vector3.zero;
+            animator.SetBool("Dead", false);
+        }
+    }
 
     [ServerRpc]
     private void MovePlayerServerRpc(int direction)
@@ -167,7 +173,9 @@ public class PlayerController : NetworkBehaviour
 
     private void AimPlayer()
     {
-        if (IsLocalPlayer && mode.Value == Mode.OFFENSE) // Ensure this code is only run in Offense mode
+        if (!IsLocalPlayer)
+            return;
+        if (mode.Value == Mode.OFFENSE) // Ensure this code is only run in Offense mode
         {
             // Handling mouse aiming
             float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
@@ -180,9 +188,13 @@ public class PlayerController : NetworkBehaviour
             currentPitch = Mathf.Clamp(currentPitch, -45f, 45f);
             currentYaw = Mathf.Clamp(currentYaw, -45f, 45f);
 
-            Quaternion targetRotation = Quaternion.Euler(currentPitch, currentYaw, 0);
-            playerCamera.transform.localRotation = targetRotation;
+        } else if (mode.Value != Mode.OFFENSE)
+        {
+            currentPitch = 0; // Subtracting to invert the vertical input
+            currentYaw = 0;
         }
+        Quaternion targetRotation = Quaternion.Euler(currentPitch, currentYaw, 0);
+        playerCamera.transform.localRotation = targetRotation;
     }
 
     [ServerRpc]
@@ -213,11 +225,12 @@ public class PlayerController : NetworkBehaviour
 
             if (Physics.Raycast(ray, out hit, maxDistance))
             {
-                var damageable = hit.collider.GetComponent<PlayerController>();
-                if (damageable != null && damageable != this)  // Ensure not hitting self
+                var hitPlayer = hit.collider.GetComponent<PlayerController>();
+                if (hitPlayer != null && hitPlayer != this)  // Ensure not hitting self
                 {
-                    // Server handles damage application
                     Debug.Log("Hit " + hit.collider.name);
+                    // Server handles damage application
+                    hitPlayer.TakeDamageServerRpc();
                 }
             }
             else
@@ -231,6 +244,15 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
+    [ServerRpc(RequireOwnership = false)]
+    public void TakeDamageServerRpc()
+    {
+        if (IsServer)
+        {
+            Debug.Log("I've been shot!");
+            animator.SetBool("Dead", true);
+        }
+    }
 
 
 }
