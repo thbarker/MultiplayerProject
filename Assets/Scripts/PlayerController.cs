@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Threading;
 using Unity.Netcode;
 using UnityEngine;
@@ -20,12 +21,15 @@ public class PlayerController : NetworkBehaviour
     public NetworkVariable<Mode> mode = new NetworkVariable<Mode>();
     public NetworkVariable<bool> canFire = new NetworkVariable<bool>();
     public NetworkVariable<bool> dead = new NetworkVariable<bool>();
+    public NetworkVariable<int> score = new NetworkVariable<int>();
     private GameManager gameManager;
     [SerializeField]
     private SkinnedMeshRenderer meshRenderer;
     public GameObject canvas;
     public GameObject crosshair;
     public GameObject deathImage;
+    public AudioSource audioSource;
+    public AudioClip gunshot, fall, grunt, whiz1, whiz2, whiz3;
 
     private void Start()
     {
@@ -33,8 +37,6 @@ public class PlayerController : NetworkBehaviour
         animator = GetComponent<Animator>();
         playerCamera = transform.Find("Camera").gameObject;
         gameManager = GameObject.FindWithTag("GameManager").GetComponent<GameManager>();
-        if (gameManager)
-            gameManager.AddPlayer();
         mode.Value = Mode.WAITING;
     }
     public override void OnNetworkSpawn()
@@ -239,39 +241,45 @@ public class PlayerController : NetworkBehaviour
     }
 
     [ServerRpc]
-    void SetHasFiredTrueServerRpc()
-    {
-        if(IsServer)
-            gameManager.UpdatePlayerFired(true);
-    }
-
-    [ServerRpc]
     void FireServerRpc(Vector3 aimDirection)
     {
-        Debug.Log("Can Fire is " + canFire.Value);
-        Debug.Log("Aim Direction is " + aimDirection);
         if (!IsServer)
             return;
         if (mode.Value == Mode.OFFENSE && canFire.Value)
         {
+            // Play gunshot audio
+            PlayGunshotClientRpc();
+
+            // Perform a raycast
             RaycastHit hit;
             Ray ray = new Ray(playerCamera.transform.position, aimDirection.normalized);  // Use normalized direction
             float maxDistance = 100.0f;
             if (Physics.Raycast(ray, out hit, maxDistance))
             {
-                Debug.Log("Performing Raycast!");
+                // Detect hitting the enemy
                 var hitPlayer = hit.collider.GetComponent<HitBox>(); 
                 Debug.Log("Hit " + hit.collider.name);
                 if (hitPlayer != null && hitPlayer != this)  // Ensure not hitting self
                 {
+                    // Hit the player
                     hitPlayer.GetShotHitBox();
+                    // Update Score
+                    IncrementScoreServerRpc();
+                } else
+                {
+                    // If they miss the target, play the whiz audio
+                    PlayWhizClientRpc();
                 }
             }
             else
             {
+                // If they miss the target and don't hit anything at all, play the whiz audio
+                PlayWhizClientRpc();
                 Debug.Log("No hit");
             }
+            // Disallow another shot
             canFire.Value = false;
+            // Update Game Manager
             gameManager.UpdatePlayerFired(true);
         }
     }
@@ -283,10 +291,68 @@ public class PlayerController : NetworkBehaviour
         if (IsServer)
         {
             Debug.Log("I've been shot!");
+            // Play death audio
+            PlayDeathClientRpc();
+
+            // Update death boolean and animator
             dead.Value = true;
             animator.SetBool("Dead", true);
         }
     }
 
+    [ServerRpc(RequireOwnership = false)]
+    public void IncrementScoreServerRpc()
+    {
+        if (IsServer)
+        {
+            score.Value++;
+        }
+    }
 
+    [ClientRpc]
+    private void PlayGunshotClientRpc()
+    {
+        audioSource.volume = Random.Range(0.9f, 1f);
+        audioSource.pitch = Random.Range(0.9f, 1.1f);
+        audioSource.PlayOneShot(gunshot);
+    }
+
+    [ClientRpc]
+    private void PlayWhizClientRpc()
+    {
+        audioSource.volume = Random.Range(0.9f, 1f);
+        audioSource.pitch = Random.Range(0.9f, 1.1f);
+        int rand = (int)Random.Range(1f,4f);
+        switch(rand)
+        {
+            case 1:
+                audioSource.PlayOneShot(whiz1); break;
+            case 2:
+                audioSource.PlayOneShot(whiz2); break;
+            default:
+                audioSource.PlayOneShot(whiz3); break;
+        }
+    }
+
+    [ClientRpc]
+    private void PlayDeathClientRpc()
+    {
+        StartCoroutine(DeathSoundCoroutine());
+    }
+
+    private IEnumerator DeathSoundCoroutine()
+    {
+        yield return new WaitForSeconds(0.5f);
+        audioSource.volume = Random.Range(0.9f, 1f);
+        audioSource.pitch = Random.Range(0.9f, 1.1f);
+        audioSource.PlayOneShot(grunt);
+        yield return new WaitForSeconds(1);
+        audioSource.volume = Random.Range(0.9f, 1f);
+        audioSource.pitch = Random.Range(0.9f, 1.1f);
+        audioSource.PlayOneShot(fall);
+    }
+    public ulong GetPlayerNetworkObjectId()
+    {
+        return NetworkObjectId; // Directly accessing the NetworkObjectId property
+    }
 }
