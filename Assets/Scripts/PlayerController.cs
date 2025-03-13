@@ -19,9 +19,13 @@ public class PlayerController : NetworkBehaviour
     private GameObject playerCamera;
     public NetworkVariable<Mode> mode = new NetworkVariable<Mode>();
     public NetworkVariable<bool> canFire = new NetworkVariable<bool>();
+    public NetworkVariable<bool> dead = new NetworkVariable<bool>();
     private GameManager gameManager;
     [SerializeField]
     private SkinnedMeshRenderer meshRenderer;
+    public GameObject canvas;
+    public GameObject crosshair;
+    public GameObject deathImage;
 
     private void Start()
     {
@@ -35,11 +39,22 @@ public class PlayerController : NetworkBehaviour
     }
     public override void OnNetworkSpawn()
     {
-        if(IsLocalPlayer)
+        if (IsLocalPlayer)
+        {
             meshRenderer.enabled = false;
-        // Lock cursor to the center of the screen
-        Cursor.lockState = CursorLockMode.Locked;
-
+            canvas = GameObject.FindWithTag("Canvas");
+            if (canvas)
+            {
+                crosshair = canvas.transform.Find("Crosshair").gameObject;
+                deathImage = canvas.transform.Find("DeathImage").gameObject;
+            }
+            else
+            {
+                Debug.Log("No Canvas found");
+            }
+            // Lock cursor to the center of the screen
+            Cursor.lockState = CursorLockMode.Locked;
+        }
         // Hide cursor from view
         Cursor.visible = false;
     }
@@ -49,9 +64,33 @@ public class PlayerController : NetworkBehaviour
         if (IsClient && IsOwner) // Check if this is the client and it owns this GameObject
         {
             HandleInput();
+            UpdateUI();
             UpdateAnimationServerRpc(currentYaw, currentPitch);
         }
+    }
 
+    private void UpdateUI()
+    {
+        if (!IsLocalPlayer)
+            return;
+        if (!canvas || !deathImage)
+            return;
+        if (dead.Value)
+        {
+            deathImage.SetActive(true);
+        }
+        else
+        {
+            deathImage.SetActive(false);
+        }
+        if (mode.Value == Mode.OFFENSE)
+        {
+            crosshair.SetActive(true);
+        }
+        else
+        {
+            crosshair.SetActive(false);
+        }
     }
     public void SetPlayerMode(Mode newMode)
     {
@@ -165,6 +204,8 @@ public class PlayerController : NetworkBehaviour
     {
         if (IsServer && mode.Value == Mode.DEFENSE) // Ensure this code is executed on the server
         {
+            if (dead.Value)
+                return;
             // Use transform.right for movement relative to the object's orientation
             Vector3 movement = transform.right * direction * speed;
             rb.velocity = movement;
@@ -204,52 +245,45 @@ public class PlayerController : NetworkBehaviour
             gameManager.UpdatePlayerFired(true);
     }
 
-    [ServerRpc(RequireOwnership = true)]
+    [ServerRpc]
     void FireServerRpc(Vector3 aimDirection)
     {
+        Debug.Log("Can Fire is " + canFire.Value);
+        Debug.Log("Aim Direction is " + aimDirection);
+        if (!IsServer)
+            return;
         if (mode.Value == Mode.OFFENSE && canFire.Value)
-        {
-            PerformRaycast(aimDirection);  // Pass the aim direction calculated on the client
-            canFire.Value = false;
-            gameManager.UpdatePlayerFired(true);
-        }
-    }
-
-    void PerformRaycast(Vector3 aimDirection)
-    {
-        if (playerCamera != null)
         {
             RaycastHit hit;
             Ray ray = new Ray(playerCamera.transform.position, aimDirection.normalized);  // Use normalized direction
             float maxDistance = 100.0f;
-
             if (Physics.Raycast(ray, out hit, maxDistance))
             {
-                var hitPlayer = hit.collider.GetComponent<PlayerController>();
+                Debug.Log("Performing Raycast!");
+                var hitPlayer = hit.collider.GetComponent<HitBox>(); 
+                Debug.Log("Hit " + hit.collider.name);
                 if (hitPlayer != null && hitPlayer != this)  // Ensure not hitting self
                 {
-                    Debug.Log("Hit " + hit.collider.name);
-                    // Server handles damage application
-                    hitPlayer.TakeDamageServerRpc();
+                    hitPlayer.GetShotHitBox();
                 }
             }
             else
             {
                 Debug.Log("No hit");
             }
-        }
-        else
-        {
-            Debug.LogError("Camera not found on the player object");
+            canFire.Value = false;
+            gameManager.UpdatePlayerFired(true);
         }
     }
 
+
     [ServerRpc(RequireOwnership = false)]
-    public void TakeDamageServerRpc()
+    public void GetShotServerRpc()
     {
         if (IsServer)
         {
             Debug.Log("I've been shot!");
+            dead.Value = true;
             animator.SetBool("Dead", true);
         }
     }

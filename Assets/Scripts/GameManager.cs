@@ -1,11 +1,13 @@
 using UnityEngine;
 using Unity.Netcode;
 using System.Collections;
+using TMPro;
 
 public class GameManager : NetworkBehaviour
 {
     public static GameManager Instance { get; private set; }
     private PlayerController player1, player2;
+    public TextMeshProUGUI roundMessage;
 
     public int numberOfPlayers = 0;
     private bool hasFired = false;
@@ -32,7 +34,7 @@ public class GameManager : NetworkBehaviour
 
     private void Update()
     {
-        if (!gameStarted && numberOfPlayers == 2) 
+        if (!gameStarted && numberOfPlayers == 2 && IsServer) 
         {
             gameStarted = true;
             ChangePlayerMode(player1, Mode.OFFENSE);
@@ -47,6 +49,8 @@ public class GameManager : NetworkBehaviour
     }
     public void AddPlayer()
     {
+        if (!IsServer)
+            return;
         if(numberOfPlayers <= 2)
         {
             numberOfPlayers++;
@@ -69,17 +73,25 @@ public class GameManager : NetworkBehaviour
     {
         while (true)
         {
-            Debug.Log("Round Starting...");
-            // Countdown round start time
-            yield return new WaitForSeconds(roundStartTime);
+            player1.dead.Value = false;
+            player2.dead.Value = false;
+            // Countdown roundStartTime
+            timeCounter = 0; // roundTime should be defined as the duration of the round in seconds
+            while (timeCounter < roundStartTime)
+            {
+                int timer = 1 + (int)(roundStartTime - timeCounter);
+                ChangeRoundMessageTextClientRpc(timer.ToString());
+                timeCounter += Time.deltaTime;
+                yield return null;
+            }
 
-            // Allow player1 to fire
-            player1.SetCanFire(true);
-
+            ChangeRoundMessageTextClientRpc("GO!");
+            // Allow players to fire
+            player1.canFire.Value = true;
+            player2.canFire.Value = true;
             // Set initial round time
             timeCounter = 0; // roundTime should be defined as the duration of the round in seconds
 
-            Debug.Log("Round Going...");
             // Countdown roundtime if player hasn't shot using hasFired bool
             while (timeCounter < roundTime && !hasFired)
             {
@@ -87,8 +99,17 @@ public class GameManager : NetworkBehaviour
                 yield return null;
             }
 
-            // Round ends either by timer or if player has fired
-            // Update the scoreboard
+            if(player1.dead.Value || player2.dead.Value)
+                ChangeRoundMessageTextClientRpc("Headshot!");
+            else
+                ChangeRoundMessageTextClientRpc("Miss!");
+
+            // Reset player's fire ability for the next round
+            player1.canFire.Value = false;
+            player2.canFire.Value = false;
+            hasFired = false;
+
+            yield return new WaitForSeconds(roundEndTime);
 
             // Check who was on offense and switch sides
             if (player1.mode.Value == Mode.OFFENSE)
@@ -102,16 +123,14 @@ public class GameManager : NetworkBehaviour
                 ChangePlayerMode(player2, Mode.DEFENSE);
             }
 
-            // Reset player's fire ability for the next round
-            player1.SetCanFire(false);
-            player2.SetCanFire(false);
-            hasFired = false;
 
-            Debug.Log("Round Ending...");
-            // Optionally, implement a delay or condition before restarting the loop or ending the game
-            yield return new WaitForSeconds(roundEndTime);
         }
     }
 
+    [ClientRpc]
+    private void ChangeRoundMessageTextClientRpc(string message)
+    {
+        roundMessage.text = message;
+    } 
 
 }
