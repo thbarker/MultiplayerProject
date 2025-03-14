@@ -366,7 +366,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 872267945
+  GlobalObjectIdHash: 1224129337
   InScenePlacedSourceGlobalObjectIdHash: 1948926174
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
@@ -405,9 +405,12 @@ MonoBehaviour:
   gunshot: {fileID: 8300000, guid: fa25a0504cd41cb45936324cc9127e10, type: 3}
   fall: {fileID: 8300000, guid: fc9da9d0e96045242b2a692dd7a4eb6e, type: 3}
   grunt: {fileID: 8300000, guid: 85f6fbc9d489c7940b227132baf04f96, type: 3}
-  whiz1: {fileID: 0}
-  whiz2: {fileID: 0}
-  whiz3: {fileID: 0}
+  whiz1: {fileID: 8300000, guid: b1fb850201081db498339402cb724c30, type: 3}
+  whiz2: {fileID: 8300000, guid: 0d579c644e9228a4f850927df3a3f0b9, type: 3}
+  whiz3: {fileID: 8300000, guid: 7dc0ce10b3caaa1488945322f1539406, type: 3}
+  footstep1: {fileID: 8300000, guid: d10c84cb72388a540be6f26883e6673c, type: 3}
+  footstep2: {fileID: 8300000, guid: eb32ed34404f8dd4a886125b0ca8e8f1, type: 3}
+  footstep3: {fileID: 8300000, guid: 8cd41ed5d1a035348b0fd3f34ee42bdb, type: 3}
 --- !u!54 &3413986752804515692
 Rigidbody:
   m_ObjectHideFlags: 0

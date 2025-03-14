@@ -164,12 +164,16 @@ public class GameManager : NetworkBehaviour
             }
 
             // Update Round Message Appropriately
-            if(player1.dead.Value || player2.dead.Value)
+            if (player1.dead.Value || player2.dead.Value)
                 ChangeRoundMessageTextClientRpc("Headshot!");
-            else if(hasFired)
+            else if (hasFired)
                 ChangeRoundMessageTextClientRpc("Miss!");
             else
+            {
                 ChangeRoundMessageTextClientRpc("Times Up!");
+                // Play Buzzer Audio when times up
+                PlayBuzzerClientRpc();
+            }
 
             // Update Scoreboards
             UpdateScoresTextClientRpc(player1Id, player1.score.Value, player2.score.Value);

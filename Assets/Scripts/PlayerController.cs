@@ -29,7 +29,7 @@ public class PlayerController : NetworkBehaviour
     public GameObject crosshair;
     public GameObject deathImage;
     public AudioSource audioSource;
-    public AudioClip gunshot, fall, grunt, whiz1, whiz2, whiz3;
+    public AudioClip gunshot, fall, grunt, whiz1, whiz2, whiz3, footstep1, footstep2, footstep3;
 
     private void Start()
     {
@@ -300,6 +300,7 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
+
     [ServerRpc(RequireOwnership = false)]
     public void IncrementScoreServerRpc()
     {
@@ -312,6 +313,7 @@ public class PlayerController : NetworkBehaviour
     [ClientRpc]
     private void PlayGunshotClientRpc()
     {
+        // Slightly vary pitch and volume
         audioSource.volume = Random.Range(0.9f, 1f);
         audioSource.pitch = Random.Range(0.9f, 1.1f);
         audioSource.PlayOneShot(gunshot);
@@ -320,10 +322,18 @@ public class PlayerController : NetworkBehaviour
     [ClientRpc]
     private void PlayWhizClientRpc()
     {
+        StartCoroutine(WhizSoundCoroutine());
+    }
+    private IEnumerator WhizSoundCoroutine()
+    {
+        // Wait 0.1 second so the gunshot doesn't hide the whiz
+        yield return new WaitForSeconds(0.1f);
+        // Slightly vary pitch and volume
         audioSource.volume = Random.Range(0.9f, 1f);
         audioSource.pitch = Random.Range(0.9f, 1.1f);
-        int rand = (int)Random.Range(1f,4f);
-        switch(rand)
+        int rand = (int)Random.Range(1f, 4f);
+        // Choose a random whiz sound to play for more variation
+        switch (rand)
         {
             case 1:
                 audioSource.PlayOneShot(whiz1); break;
@@ -335,6 +345,25 @@ public class PlayerController : NetworkBehaviour
     }
 
     [ClientRpc]
+    private void PlayFootstepClientRpc()
+    {
+        // Slightly vary pitch and volume
+        audioSource.volume = Random.Range(0.9f, 1f);
+        audioSource.pitch = Random.Range(0.9f, 1.1f);
+        int rand = (int)Random.Range(1f, 4f);
+        // Choose a random footstep sound to play for more variation
+        switch (rand)
+        {
+            case 1:
+                audioSource.PlayOneShot(footstep1); break;
+            case 2:
+                audioSource.PlayOneShot(footstep2); break;
+            default:
+                audioSource.PlayOneShot(footstep3); break;
+        }
+    }
+
+    [ClientRpc]
     private void PlayDeathClientRpc()
     {
         StartCoroutine(DeathSoundCoroutine());
@@ -342,11 +371,15 @@ public class PlayerController : NetworkBehaviour
 
     private IEnumerator DeathSoundCoroutine()
     {
-        yield return new WaitForSeconds(0.5f);
+        // Wait for 0.25s before the player grunts
+        yield return new WaitForSeconds(0.25f);
+        // Slightly vary pitch and volume
         audioSource.volume = Random.Range(0.9f, 1f);
         audioSource.pitch = Random.Range(0.9f, 1.1f);
         audioSource.PlayOneShot(grunt);
-        yield return new WaitForSeconds(1);
+        // Wait for another 1.1s for the player to hit the floor
+        yield return new WaitForSeconds(1.1f);
+        // Slightly vary pitch and volume
         audioSource.volume = Random.Range(0.9f, 1f);
         audioSource.pitch = Random.Range(0.9f, 1.1f);
         audioSource.PlayOneShot(fall);
