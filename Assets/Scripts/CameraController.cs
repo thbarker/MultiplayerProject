@@ -1,6 +1,10 @@
 using Unity.Netcode;
 using UnityEngine;
 
+/// <summary>
+/// This script is designed to ensure Cameras a client specific
+/// and not globally shared
+/// </summary>
 public class CameraController : NetworkBehaviour
 {
     public Camera playerCamera;

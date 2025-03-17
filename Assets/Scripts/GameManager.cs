@@ -2,9 +2,11 @@ using UnityEngine;
 using Unity.Netcode;
 using System.Collections;
 using TMPro;
-using UnityEditor;
-using System;
 
+/// <summary>
+/// This script is designed to handle the gameplay and interactions
+/// between the two players.
+/// </summary>
 public class GameManager : NetworkBehaviour
 {
     public static GameManager Instance { get; private set; }
@@ -29,6 +31,7 @@ public class GameManager : NetworkBehaviour
 
     void Awake()
     {
+        // Ensure this object is a singleton
         if (Instance == null)
         {
             Instance = this;
@@ -39,21 +42,31 @@ public class GameManager : NetworkBehaviour
             Destroy(gameObject);
         }
     }
+
     public override void OnNetworkSpawn()
     {
+        // Set up client connections here
         RegisterNetworkEvents();
     }
+    /// <summary>
+    /// Client connection and disconnection handling
+    /// </summary>
     private void RegisterNetworkEvents()
     {
         NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
         NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
     }
+    /// <summary>
+    /// Add a Player if a client connects
+    /// </summary>
     private void OnClientConnected(ulong clientId)
     {
         Debug.Log($"Client connected: {clientId}");
         AddPlayer();
     }
-
+    /// <summary>
+    /// Remove a Player if a client disconnects
+    /// </summary>
     private void OnClientDisconnected(ulong clientId)
     {
         Debug.Log($"Client disconnected: {clientId}");
@@ -64,14 +77,21 @@ public class GameManager : NetworkBehaviour
     {
         if (!gameStarted && numberOfPlayers == 2 && IsServer) 
         {
+            // Start the game when 2 players are connected and no game has been started
             StartCoroutine(GameplayLoop());
         }
     }
-
+    /// <summary>
+    /// Function to change the players mode 
+    /// </summary>
     public void ChangePlayerMode(PlayerController player, Mode newMode)
     {
         player.SetPlayerMode(newMode);
     }
+
+    /// <summary>
+    /// Adds a player to the game's numberOfPlayers counter
+    /// </summary>
     public void AddPlayer()
     {
         if (!IsServer)
@@ -82,6 +102,10 @@ public class GameManager : NetworkBehaviour
             Debug.Log("Player added. Total players: " + numberOfPlayers);
         }
     }
+
+    /// <summary>
+    /// Removes a player to the game's numberOfPlayers counter
+    /// </summary>
     public void RemovePlayer()
     {
         if (!IsServer)
@@ -95,11 +119,17 @@ public class GameManager : NetworkBehaviour
             gameStarted = false;
         }
     }
+    /// <summary>
+    /// Register that a player has already fired, so it can progress the round
+    /// </summary>
     public void UpdatePlayerFired(bool flag)
     {
         hasFired = flag;
     }
-
+    /// <summary>
+    /// Coroutine for the entire Gameplay Loop. Meant to be started when 2
+    /// players connect, and a gameplayloop isn't already running.
+    /// </summary>
     private IEnumerator GameplayLoop()
     {
         // Update gameStarted flag
@@ -120,6 +150,10 @@ public class GameManager : NetworkBehaviour
         // Reset Scores to 0
         player1.score.Value = 0;
         player2.score.Value = 0;
+
+        // Update Scoreboards
+        UpdateScoresTextClientRpc(player1Id, player1.score.Value, player2.score.Value);
+        UpdateScoresTextClientRpc(player2Id, player2.score.Value, player1.score.Value);
 
         // Determine Game Over Condition
         int victoryScore = (totalRounds + 1) / 2;
@@ -218,13 +252,17 @@ public class GameManager : NetworkBehaviour
         // Update the game started flag
         gameStarted = false;
     }
-
+    /// <summary>
+    /// Updates the Round message on the clients
+    /// </summary>
     [ClientRpc]
     private void ChangeRoundMessageTextClientRpc(string message)
     {
         roundMessage.text = message;
     }
-
+    /// <summary>
+    /// Updates the scores on the client, based upon their ID, Score, and Opponent score
+    /// </summary>
     [ClientRpc]
     private void UpdateScoresTextClientRpc(ulong playerId, int playerScoreParam, int enemyScoreParam)
     {
@@ -234,7 +272,10 @@ public class GameManager : NetworkBehaviour
             enemyScore.text = enemyScoreParam.ToString();
         }
     }
-
+    /// <summary>
+    /// Updates the Round Message for a Game Over message for the clients,
+    /// depending on which client won or lost
+    /// </summary>
     [ClientRpc]
     private void GameOverTextClientRpc(bool win, ulong playerId)
     {
@@ -249,13 +290,17 @@ public class GameManager : NetworkBehaviour
             }
         }
     }
-
+    /// <summary>
+    /// Handle Ticking Audio on Clients
+    /// </summary>
     [ClientRpc]
     private void PlayTickingClientRpc()
     {
         ticking.Play();
     }
-
+    /// <summary>
+    /// Handle Buzzing Audio on Clients
+    /// </summary>
     [ClientRpc]
     private void PlayBuzzerClientRpc()
     {

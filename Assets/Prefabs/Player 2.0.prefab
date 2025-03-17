@@ -366,7 +366,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  GlobalObjectIdHash: 1224129337
+  GlobalObjectIdHash: 3083366519
   InScenePlacedSourceGlobalObjectIdHash: 1948926174
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
@@ -398,9 +398,6 @@ MonoBehaviour:
   score:
     m_InternalValue: 0
   meshRenderer: {fileID: 159924077405131957}
-  canvas: {fileID: 0}
-  crosshair: {fileID: 0}
-  deathImage: {fileID: 0}
   audioSource: {fileID: -2619934761552192665}
   gunshot: {fileID: 8300000, guid: fa25a0504cd41cb45936324cc9127e10, type: 3}
   fall: {fileID: 8300000, guid: fc9da9d0e96045242b2a692dd7a4eb6e, type: 3}

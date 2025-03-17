@@ -1,6 +1,9 @@
 using Unity.Netcode;
 using UnityEngine;
 
+/// <summary>
+/// This script is intended to replace the default spawn behavior provided by Netcode
+/// </summary>
 public class PlayerSpawner : NetworkBehaviour
 {
     public GameObject playerPrefab; // Assign this in the Unity editor with your player prefab
@@ -8,7 +11,9 @@ public class PlayerSpawner : NetworkBehaviour
     public Transform spawnB; // Assign in Unity editor, spawn point for all subsequent players
 
     private bool isFirstPlayerSpawned = false; // To track if the first player has been spawned
-
+    /// <summary>
+    /// Handle Client Connection by calling a special function
+    /// </summary>
     public override void OnNetworkSpawn()
     {
         if (IsServer)
@@ -16,7 +21,9 @@ public class PlayerSpawner : NetworkBehaviour
             NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
         }
     }
-
+    /// <summary>
+    /// Handle Client Disconnection by disabling a special function
+    /// </summary>
     public override void OnNetworkDespawn()
     {
         if (IsServer)
@@ -25,6 +32,10 @@ public class PlayerSpawner : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Handle Client Connection Logic. Spawns the first client at Spawn A, and the 
+    /// second client at Spawn B.
+    /// </summary>
     private void HandleClientConnected(ulong clientId)
     {
         // Determine the spawn point based on whether the first player has been spawned

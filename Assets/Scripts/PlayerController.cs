@@ -1,7 +1,10 @@
 using System.Collections;
-using System.Threading;
 using Unity.Netcode;
 using UnityEngine;
+
+/// <summary>
+/// Enumerator for the different player modes to specify which inputs are allowed
+/// </summary>
 public enum Mode
 {
     WAITING,
@@ -9,41 +12,66 @@ public enum Mode
     DEFENSE
 }
 
+/// <summary>
+/// This is the Player Controller Logic. It is server-authoritative for most 
+/// functionalities including animation, rb movement, firing, getting shot, 
+/// and scoring. Camera movement and Audio remain client sided.
+/// </summary>
 public class PlayerController : NetworkBehaviour
 {
-    public float mouseSensitivity = 100.0f;
+    // Tunables
+    [SerializeField]
+    [Range(0f, 500f)]
+    private float mouseSensitivity = 100.0f;
+    [SerializeField]
+    [Range(0f, 10f)]
+    private float speed = 5.0f;
+
+    // Helper variables
     private float currentPitch = 0.0f;
     private float currentYaw = 0.0f;
-    public float speed = 5.0f;
-    private Rigidbody rb;
-    private Animator animator;
-    private GameObject playerCamera;
+
+    // Network Variables
     public NetworkVariable<Mode> mode = new NetworkVariable<Mode>();
     public NetworkVariable<bool> canFire = new NetworkVariable<bool>();
     public NetworkVariable<bool> dead = new NetworkVariable<bool>();
     public NetworkVariable<int> score = new NetworkVariable<int>();
-    private GameManager gameManager;
+
+    // References
     [SerializeField]
     private SkinnedMeshRenderer meshRenderer;
-    public GameObject canvas;
-    public GameObject crosshair;
-    public GameObject deathImage;
-    public AudioSource audioSource;
-    public AudioClip gunshot, fall, grunt, whiz1, whiz2, whiz3, footstep1, footstep2, footstep3;
+    private GameManager gameManager;
+    private GameObject playerCamera;
+    private Rigidbody rb;
+    private Animator animator;
+    private GameObject canvas;
+    private GameObject crosshair;
+    private GameObject deathImage;
+    [SerializeField]
+    private AudioSource audioSource;
+    [SerializeField]
+    private AudioClip gunshot, fall, grunt, whiz1, whiz2, whiz3, footstep1, footstep2, footstep3;
 
     private void Start()
     {
+        // Get references to components
         rb = GetComponent<Rigidbody>();
         animator = GetComponent<Animator>();
         playerCamera = transform.Find("Camera").gameObject;
         gameManager = GameObject.FindWithTag("GameManager").GetComponent<GameManager>();
+        // Initialize mode
         mode.Value = Mode.WAITING;
     }
     public override void OnNetworkSpawn()
     {
+        // Handle specific client initializations in OnNetworkSpawn 
+        // because in Start, the network flag might not be initialized
         if (IsLocalPlayer)
         {
+            // Local Player can't see their own mesh
             meshRenderer.enabled = false;
+
+            // Initialize UI references
             canvas = GameObject.FindWithTag("Canvas");
             if (canvas)
             {
@@ -54,6 +82,7 @@ public class PlayerController : NetworkBehaviour
             {
                 Debug.Log("No Canvas found");
             }
+
             // Lock cursor to the center of the screen
             Cursor.lockState = CursorLockMode.Locked;
         }
@@ -65,12 +94,19 @@ public class PlayerController : NetworkBehaviour
     {
         if (IsClient && IsOwner) // Check if this is the client and it owns this GameObject
         {
+            // Input Handling
             HandleInput();
+            // UI Updates
             UpdateUI();
+            // Animation Updates
             UpdateAnimationServerRpc(currentYaw, currentPitch);
         }
     }
 
+    /// <summary>
+    /// Updates the UI every frame so the crosshair is only visible on 
+    /// Offense, and the death screen only appears on a death sequence.
+    /// </summary>
     private void UpdateUI()
     {
         if (!IsLocalPlayer)
@@ -94,6 +130,10 @@ public class PlayerController : NetworkBehaviour
             crosshair.SetActive(false);
         }
     }
+    /// <summary>
+    /// Handles the player's mode on the client and calls appropriate 
+    /// functions to handle additional mode logic
+    /// </summary>
     public void SetPlayerMode(Mode newMode)
     {
         if (IsClient)
@@ -109,17 +149,25 @@ public class PlayerController : NetworkBehaviour
             }
         }
     }
-
+    /// <summary>
+    /// Resets the Camera Rotation and Player Position when on offense
+    /// </summary>
     private void SetOffense()
     {
         ResetPositionServerRpc();
         ResetCameraRotation();
     }
+    /// <summary>
+    /// Resets the Camera Rotation and Player Position when on defense
+    /// </summary>
     private void SetDefense()
     {
         ResetPositionServerRpc();
         ResetCameraRotation();
     }
+    /// <summary>
+    /// Makes sure player can fire again on the server side.
+    /// </summary>
     public void SetCanFire(bool flag)
     {
         if (IsServer)
@@ -128,6 +176,10 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Call appropriate movement ServerRpc's based on input, and 
+    /// adjust the camera on the client side.
+    /// </summary>
     void HandleInput()
     {
         // Handle movement
@@ -155,21 +207,28 @@ public class PlayerController : NetworkBehaviour
             }
         }
     }
-
+    /// <summary>
+    /// Update the animations on the server so that the network 
+    /// animator can handle the client updates
+    /// </summary>
     [ServerRpc]
     void UpdateAnimationServerRpc(float yaw, float pitch)
     {
         UpdateAnimation(yaw, pitch); // Update server-side
     }
 
+    /// <summary>
+    /// Logic called by a ServerRpc for animator variables
+    /// </summary>
     void UpdateAnimation(float yaw, float pitch)
     {
+        // Update movement animations based on rb speed
         Vector3 localVelocity = transform.InverseTransformDirection(rb.velocity);
-
         animator.SetFloat("Speed", localVelocity.x);
 
         if (mode.Value == Mode.OFFENSE)
         {
+            // Update aiming blend space when on offense
             animator.SetFloat("Speed", 0);
             animator.SetBool("Aiming", true);
             animator.SetFloat("AimX", yaw / 90);
@@ -177,19 +236,24 @@ public class PlayerController : NetworkBehaviour
         }
         else
         {
+            // Reset aiming to center when not on offense
             animator.SetBool("Aiming", false);
             animator.SetFloat("AimX", 0);
             animator.SetFloat("AimY", 0);
         }
     }
-
+    /// <summary>
+    /// Set Camera Look Forward
+    /// </summary>
     private void ResetCameraRotation()
     {
         currentPitch = 0;
         currentYaw = 0;
         playerCamera.transform.localRotation = Quaternion.identity;
     }
-
+    /// <summary>
+    /// Set Position back to center on the server
+    /// </summary>
     [ServerRpc(RequireOwnership = false)]
     private void ResetPositionServerRpc()
     {
@@ -200,7 +264,9 @@ public class PlayerController : NetworkBehaviour
             animator.SetBool("Dead", false);
         }
     }
-
+    /// <summary>
+    /// ServerRpc controls the Movement Code
+    /// </summary>
     [ServerRpc]
     private void MovePlayerServerRpc(int direction)
     {
@@ -213,7 +279,9 @@ public class PlayerController : NetworkBehaviour
             rb.velocity = movement;
         }
     }
-
+    /// <summary>
+    /// Client controls the Aiming Code
+    /// </summary>
     private void AimPlayer()
     {
         if (!IsLocalPlayer)
@@ -239,7 +307,9 @@ public class PlayerController : NetworkBehaviour
         Quaternion targetRotation = Quaternion.Euler(currentPitch, currentYaw, 0);
         playerCamera.transform.localRotation = targetRotation;
     }
-
+    /// <summary>
+    /// ServerRpc controls the Firing
+    /// </summary>
     [ServerRpc]
     void FireServerRpc(Vector3 aimDirection)
     {
@@ -284,7 +354,9 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
-
+    /// <summary>
+    /// ServerRpc controls character reaction to a hit
+    /// </summary>
     [ServerRpc(RequireOwnership = false)]
     public void GetShotServerRpc()
     {
@@ -300,7 +372,9 @@ public class PlayerController : NetworkBehaviour
         }
     }
 
-
+    /// <summary>
+    /// ServerRpc controls the Scoring System
+    /// </summary>
     [ServerRpc(RequireOwnership = false)]
     public void IncrementScoreServerRpc()
     {
@@ -309,7 +383,9 @@ public class PlayerController : NetworkBehaviour
             score.Value++;
         }
     }
-
+    /// <summary>
+    /// Gunshot Audio on the client side
+    /// </summary>
     [ClientRpc]
     private void PlayGunshotClientRpc()
     {
@@ -318,12 +394,17 @@ public class PlayerController : NetworkBehaviour
         audioSource.pitch = Random.Range(0.9f, 1.1f);
         audioSource.PlayOneShot(gunshot);
     }
-
+    /// <summary>
+    /// Bullet Whiz by Audio on the client side
+    /// </summary>
     [ClientRpc]
     private void PlayWhizClientRpc()
     {
         StartCoroutine(WhizSoundCoroutine());
     }
+    /// <summary>
+    /// Coroutine to delay the whiz sound effect for better perception of a miss
+    /// </summary>
     private IEnumerator WhizSoundCoroutine()
     {
         // Wait 0.1 second so the gunshot doesn't hide the whiz
@@ -343,7 +424,9 @@ public class PlayerController : NetworkBehaviour
                 audioSource.PlayOneShot(whiz3); break;
         }
     }
-
+    /// <summary>
+    /// Footstep Audio on the client side
+    /// </summary>
     [ClientRpc]
     private void PlayFootstepClientRpc()
     {
@@ -362,13 +445,17 @@ public class PlayerController : NetworkBehaviour
                 audioSource.PlayOneShot(footstep3); break;
         }
     }
-
+    /// <summary>
+    /// Death Sound Sequence Audio on the client side
+    /// </summary>
     [ClientRpc]
     private void PlayDeathClientRpc()
     {
         StartCoroutine(DeathSoundCoroutine());
     }
-
+    /// <summary>
+    /// Death Sequence Sound is controlled by a coroutine to implement proper delays
+    /// </summary>
     private IEnumerator DeathSoundCoroutine()
     {
         // Wait for 0.25s before the player grunts
@@ -384,6 +471,9 @@ public class PlayerController : NetworkBehaviour
         audioSource.pitch = Random.Range(0.9f, 1.1f);
         audioSource.PlayOneShot(fall);
     }
+    /// <summary>
+    /// Client ID Getter
+    /// </summary>
     public ulong GetPlayerNetworkObjectId()
     {
         return NetworkObjectId; // Directly accessing the NetworkObjectId property
